@@ -1,0 +1,106 @@
+@import "tailwindcss";
+
+:root {
+  /* Default: cyber-dark */
+  --background: #0A0A0F;
+  --surface: #111118;
+  --border: #1E1E2E;
+  --accent: #00D4FF;
+  --accent-rgb: 0, 212, 255;
+  --text-primary: #FFFFFF;
+  --text-secondary: #8F8FA3;
+  --accent-hover: #00B1D9;
+}
+
+[data-theme="cyber-dark"] {
+  --background: #0A0A0F;
+  --surface: #111118;
+  --border: #1E1E2E;
+  --accent: #00D4FF;
+  --accent-rgb: 0, 212, 255;
+  --text-primary: #FFFFFF;
+  --text-secondary: #8F8FA3;
+  --accent-hover: #00B1D9;
+}
+
+[data-theme="neon-night"] {
+  --background: #050510;
+  --surface: #0D0C1F;
+  --border: #221B47;
+  --accent: #FF0080;
+  --accent-rgb: 255, 0, 128;
+  --text-primary: #FFFFFF;
+  --text-secondary: #998FB8;
+  --accent-hover: #D9006C;
+}
+
+[data-theme="forest-ops"] {
+  --background: #0D1A0D;
+  --surface: #142614;
+  --border: #243D24;
+  --accent: #00FF88;
+  --accent-rgb: 0, 255, 136;
+  --text-primary: #F0FFF4;
+  --text-secondary: #8BB394;
+  --accent-hover: #00D472;
+}
+
+[data-theme="gold-elite"] {
+  --background: #0F0A00;
+  --surface: #1A1200;
+  --border: #2E2100;
+  --accent: #FFD700;
+  --accent-rgb: 255, 215, 0;
+  --text-primary: #FFFDF0;
+  --text-secondary: #B3A380;
+  --accent-hover: #D9B700;
+}
+
+[data-theme="light-arena"] {
+  --background: #F0F4FF;
+  --surface: #FFFFFF;
+  --border: #D2D9EE;
+  --accent: #4F46E5;
+  --accent-rgb: 79, 70, 229;
+  --text-primary: #0F172A;
+  --text-secondary: #475569;
+  --accent-hover: #3730A3;
+}
+
+@theme {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --font-display: var(--font-orbitron), var(--font-rajdhani), sans-serif;
+  --font-body: var(--font-outfit), var(--font-dm-sans), sans-serif;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--background);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}

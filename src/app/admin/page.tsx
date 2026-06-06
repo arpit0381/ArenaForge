@@ -1,0 +1,955 @@
+"use client";
+
+import React, { useEffect, useState } from "react";
+import Shell from "@/components/layout/Shell";
+import { db } from "@/lib/db";
+import { generateRooms } from "@/lib/engines/roomGenerator";
+import { calculateTeamMatchScore } from "@/lib/engines/pointsEngine";
+import { autoGenerateGrandFinal } from "@/lib/engines/qualificationEngine";
+import { Tournament, Team, TournamentRegistration, MatchRoom, Game, RoomAssignment, Payment, User } from "@/types/database.types";
+import { 
+  ShieldAlert, 
+  BarChart3, 
+  Settings, 
+  DollarSign, 
+  Users, 
+  Check, 
+  X, 
+  Save, 
+  Play, 
+  Plus, 
+  CheckSquare,
+  Sparkles,
+  Layers,
+  FileText,
+  Trophy,
+  Award
+} from "lucide-react";
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, BarChart, Bar, Cell } from "recharts";
+
+// Mock revenue data
+const revenueData = [
+  { day: "Day 1", amount: 1500 },
+  { day: "Day 5", amount: 3500 },
+  { day: "Day 10", amount: 8000 },
+  { day: "Day 15", amount: 12000 },
+  { day: "Day 20", amount: 24000 },
+  { day: "Day 25", amount: 32000 },
+  { day: "Day 30", amount: 48000 },
+];
+
+export default function AdminDashboard() {
+  const [activeSubTab, setActiveSubTab] = useState<"analytics" | "payments" | "tournaments" | "matches">("analytics");
+  
+  // DB states
+  const [tournaments, setTournaments] = useState<Tournament[]>([]);
+  const [registrations, setRegistrations] = useState<TournamentRegistration[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [games, setGames] = useState<Game[]>([]);
+  const [rooms, setRooms] = useState<MatchRoom[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
+
+  // Winners Podium state
+  const [podiumChampionId, setPodiumChampionId] = useState("");
+  const [podiumRunnerUpId, setPodiumRunnerUpId] = useState("");
+  const [podiumMvpId, setPodiumMvpId] = useState("");
+
+  // Tournament creator form
+  const [newTourneyName, setNewTourneyName] = useState("");
+  const [newTourneyGame, setNewTourneyGame] = useState("g-freefire");
+  const [newTourneyFee, setNewTourneyFee] = useState(100);
+  const [newTourneyPrize, setNewTourneyPrize] = useState(20000);
+  const [newTourneyCapacity, setNewTourneyCapacity] = useState(12);
+  const [newTourneyQualifiers, setNewTourneyQualifiers] = useState(4);
+  const [newTourneyRules, setNewTourneyRules] = useState("");
+
+  // Match management states
+  const [selectedTourneyId, setSelectedTourneyId] = useState("");
+  const [selectedRoomId, setSelectedRoomId] = useState("");
+  
+  // Results spreadsheet editing
+  const [roomCredentialsCode, setRoomCredentialsCode] = useState("");
+  const [roomCredentialsPass, setRoomCredentialsPass] = useState("");
+  const [resultsRows, setResultsRows] = useState<{ teamId: string; position: number; kills: number; totalPoints: number }[]>([]);
+
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  const loadAll = () => {
+    if (!db) return;
+    setTournaments(db.getTournaments());
+    setRegistrations(db.getRegistrations());
+    setTeams(db.getTeams());
+    setGames(db.getGames());
+    setRooms(db.getRooms());
+    setPayments(db.getPayments());
+  };
+
+  useEffect(() => {
+    loadAll();
+    window.addEventListener("db-sync", loadAll);
+    return () => window.removeEventListener("db-sync", loadAll);
+  }, []);
+
+  // Set default game once games are loaded
+  useEffect(() => {
+    if (games.length > 0 && (newTourneyGame === "g-freefire" || !newTourneyGame)) {
+      setNewTourneyGame(games[0].id);
+    }
+  }, [games, newTourneyGame]);
+
+  // Set default tournament selection for match panel
+  useEffect(() => {
+    if (tournaments.length > 0 && !selectedTourneyId) {
+      setSelectedTourneyId(tournaments[0].id);
+    }
+  }, [tournaments, selectedTourneyId]);
+
+  // Load winners podium if tournament is already completed
+  useEffect(() => {
+    if (!selectedTourneyId) return;
+    const tourney = tournaments.find(t => t.id === selectedTourneyId);
+    if (tourney && tourney.status === "completed") {
+      setPodiumChampionId(tourney.champion_team_id || "");
+      setPodiumRunnerUpId(tourney.runner_up_team_id || "");
+      setPodiumMvpId(tourney.mvp_player_id || "");
+    } else {
+      setPodiumChampionId("");
+      setPodiumRunnerUpId("");
+      setPodiumMvpId("");
+    }
+  }, [selectedTourneyId, tournaments]);
+
+  // Load results sheet row state when a room is selected
+  useEffect(() => {
+    if (!selectedRoomId || !db) {
+      setResultsRows([]);
+      setRoomCredentialsCode("");
+      setRoomCredentialsPass("");
+      return;
+    }
+    const room = rooms.find(r => r.id === selectedRoomId);
+    if (room) {
+      setRoomCredentialsCode(room.room_id_code || "");
+      setRoomCredentialsPass(room.room_password || "");
+      
+      const assignments = db.getRoomAssignments(selectedRoomId);
+      const existingResults = db.getResultsForRoom(selectedRoomId);
+
+      const rows = assignments.map((assign: RoomAssignment) => {
+        const result = existingResults.find(r => r.team_id === assign.team_id);
+        return {
+          teamId: assign.team_id,
+          position: result ? result.position : 1,
+          kills: result ? result.kills : 0,
+          totalPoints: result ? result.total_points : 0
+        };
+      });
+      setResultsRows(rows);
+    }
+  }, [selectedRoomId, rooms]);
+
+  const handleApprovePayment = (id: string) => {
+    if (!db) return;
+    db.approveRegistration(id);
+    setMessage("Registration verified and team approved!");
+    loadAll();
+    setTimeout(() => setMessage(""), 2000);
+  };
+
+  const handleRejectPayment = (id: string) => {
+    if (!db) return;
+    const reason = prompt("Enter rejection reason:") || "Invalid UPI UTR code / Screenshot blur";
+    db.rejectRegistration(id, reason);
+    setError("Registration rejected.");
+    loadAll();
+    setTimeout(() => setError(""), 2000);
+  };
+
+  const handleCreateTournament = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!db) return;
+    
+    db.createTournament({
+      name: newTourneyName,
+      game_id: newTourneyGame,
+      entry_fee: Number(newTourneyFee),
+      prize_pool: Number(newTourneyPrize),
+      max_teams: Number(newTourneyCapacity),
+      qualifier_spots: Number(newTourneyQualifiers),
+      rules: newTourneyRules
+    });
+
+    setMessage("New Tournament registered successfully!");
+    setNewTourneyName("");
+    setNewTourneyRules("");
+    loadAll();
+    setTimeout(() => {
+      setMessage("");
+      setActiveSubTab("matches");
+    }, 2000);
+  };
+
+  const handleGenerateGroups = () => {
+    if (!selectedTourneyId || !db) return;
+    const tourney = tournaments.find(t => t.id === selectedTourneyId);
+    if (!tourney) return;
+
+    // Get approved teams for this tournament
+    const tourneyRegs = registrations.filter(r => r.tournament_id === selectedTourneyId && r.status === "approved");
+    const registeredTeams = tourneyRegs.map(r => teams.find(t => t.id === r.team_id)).filter(Boolean) as Team[];
+
+    if (registeredTeams.length === 0) {
+      alert("No approved teams found! Approve registrations in Payment Tab first.");
+      return;
+    }
+
+    const game = games.find(g => g.id === tourney.game_id);
+    const teamsPerRoom = game ? game.teams_per_room : 12;
+
+    const { rooms: generatedRooms, assignments } = generateRooms(tourney, registeredTeams, teamsPerRoom);
+    db.saveRoomsAndAssignments(generatedRooms, assignments);
+    setMessage(`Successfully generated ${generatedRooms.length} group match rooms!`);
+    loadAll();
+    setTimeout(() => setMessage(""), 2000);
+  };
+
+  const handleSaveRoomCredentials = () => {
+    if (!selectedRoomId || !db) return;
+    db.updateRoomDetails(selectedRoomId, roomCredentialsCode, roomCredentialsPass);
+    setMessage("Room credentials locked and dispatched to players!");
+    loadAll();
+    setTimeout(() => setMessage(""), 2000);
+  };
+
+  // Recalculate row points dynamically on spreadsheets edit
+  const handleResultsRowChange = (teamId: string, field: "position" | "kills", value: number) => {
+    const tourney = tournaments.find(t => t.id === selectedTourneyId);
+    const game = games.find(g => g.id === tourney?.game_id);
+    if (!game) return;
+
+    setResultsRows(prev => prev.map(row => {
+      if (row.teamId === teamId) {
+        const updatedRow = { ...row, [field]: value };
+        const score = calculateTeamMatchScore(game.points_config, updatedRow.position, updatedRow.kills);
+        updatedRow.totalPoints = score.totalPoints;
+        return updatedRow;
+      }
+      return row;
+    }));
+  };
+
+  const handleSaveMatchResults = () => {
+    if (!selectedRoomId || !db) return;
+    const tourney = tournaments.find(t => t.id === selectedTourneyId);
+    const game = games.find(g => g.id === tourney?.game_id);
+    if (!game) return;
+
+    const payload = resultsRows.map(row => {
+      const score = calculateTeamMatchScore(game.points_config, row.position, row.kills);
+      return {
+        match_id: selectedRoomId,
+        team_id: row.teamId,
+        position: row.position,
+        kills: row.kills,
+        placement_points: score.placementPoints,
+        kill_points: score.killPoints
+      };
+    });
+
+    db.enterResults(selectedRoomId, payload);
+    setMessage("Match results successfully compiled and leaderboard updated!");
+    
+    // Auto Grand Final generator trigger check
+    if (tourney) {
+      const gfRoom = autoGenerateGrandFinal(tourney, db);
+      if (gfRoom) {
+        setMessage("Qualifier stage complete! Grand Final room generated automatically.");
+      }
+    }
+
+    loadAll();
+    setTimeout(() => setMessage(""), 2000);
+  };
+
+  const registrationsWithPayments = registrations.map(reg => {
+    const pay = payments.find(p => p.registration_id === reg.id);
+    return {
+      ...reg,
+      payment_status: pay ? pay.status : "pending",
+      utr_number: pay ? pay.utr_number : "",
+      payment_screenshot_url: pay ? pay.screenshot_url : null,
+      payment_amount: pay ? pay.amount : 0
+    };
+  });
+
+  const selectedTourney = tournaments.find(t => t.id === selectedTourneyId);
+  const registeredTeams = selectedTourney
+    ? registrations.filter(r => r.tournament_id === selectedTourneyId && r.status === "approved")
+        .map(r => teams.find(t => t.id === r.team_id))
+        .filter(Boolean) as Team[]
+    : [];
+
+  const registeredPlayers = (() => {
+    if (!selectedTourney || !db) return [];
+    const playersMap: { [id: string]: User } = {};
+    registeredTeams.forEach(team => {
+      db.getTeamMembers(team.id)
+        .filter(m => m.status === "approved")
+        .forEach(m => {
+          const profile = db.getProfiles().find(p => p.id === m.player_id);
+          if (profile) {
+            playersMap[profile.id] = profile;
+          }
+        });
+    });
+    return Object.values(playersMap);
+  })();
+
+  // Dynamic Calculations for Analytics
+  const totalRevenue = payments
+    .filter(p => p.status === "approved")
+    .reduce((sum, p) => sum + p.amount, 0);
+
+  const approvedPlayersCount = db ? db.getProfiles().length : 0;
+
+  const getRevenueTrend = () => {
+    const approvedPayments = [...payments]
+      .filter(p => p.status === "approved")
+      .sort((a, b) => new Date(a.created_at || "").getTime() - new Date(b.created_at || "").getTime());
+    
+    if (approvedPayments.length === 0) {
+      return [
+        { day: "Start", amount: 0 }
+      ];
+    }
+
+    let runningTotal = 0;
+    return approvedPayments.map((p, idx) => {
+      runningTotal += p.amount;
+      const d = new Date(p.created_at || "");
+      const label = d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+      return {
+        day: label || `Tx ${idx + 1}`,
+        amount: runningTotal
+      };
+    });
+  };
+
+  const revenueTrendData = getRevenueTrend();
+
+  const handleDeclareWinners = () => {
+    if (!db || !selectedTourneyId || !podiumChampionId || !podiumRunnerUpId || !podiumMvpId) return;
+    
+    if (podiumChampionId === podiumRunnerUpId) {
+      alert("Champion and Runner Up cannot be the same team.");
+      return;
+    }
+
+    db.endTournament(selectedTourneyId, podiumChampionId, podiumRunnerUpId, podiumMvpId);
+    setMessage("Tournament closed! Winners declared and announcements pushed.");
+    loadAll();
+    setTimeout(() => setMessage(""), 2500);
+  };
+
+  return (
+    <Shell>
+      <div className="space-y-6">
+        
+        {/* Banner */}
+        <div className="bg-red-500/10 border border-red-500/20 p-5 rounded-2xl flex items-center justify-between">
+          <div className="space-y-1">
+            <h1 className="text-2xl font-bold font-display uppercase tracking-wide text-red-400 flex items-center gap-2">
+              <ShieldAlert size={24} /> Arena Commander Deck
+            </h1>
+            <p className="text-xs text-text-secondary">
+              Verify payments, run Fisher-Yates group draws, compute result spreadsheets, and spin up finals.
+            </p>
+          </div>
+        </div>
+
+        {/* Global status messages */}
+        {message && (
+          <div className="p-3.5 bg-green-500/10 border border-green-500/30 rounded-xl text-xs text-green-400 font-semibold animate-pulse">
+            ✓ {message}
+          </div>
+        )}
+        {error && (
+          <div className="p-3.5 bg-red-500/10 border border-red-500/30 rounded-xl text-xs text-red-400 font-semibold">
+            ⚠️ {error}
+          </div>
+        )}
+
+        {/* Mini Tab controllers */}
+        <div className="flex flex-wrap items-center gap-1.5 border-b border-border/60 pb-1.5">
+          {[
+            { id: "analytics", label: "Analytics", icon: BarChart3 },
+            { id: "payments", label: `Payments Pending (${registrationsWithPayments.filter(r => r.payment_status === "pending").length})`, icon: DollarSign },
+            { id: "tournaments", label: "Creator Desk", icon: Plus },
+            { id: "matches", label: "Match Management", icon: Settings },
+          ].map((tab) => {
+            const ActiveIcon = tab.icon;
+            const active = activeSubTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveSubTab(tab.id as any)}
+                className={`flex items-center gap-2 px-4 py-2 border-b-2 text-xs font-bold uppercase tracking-wider transition ${
+                  active
+                    ? "border-red-500 text-red-400"
+                    : "border-transparent text-text-secondary hover:text-text-primary"
+                }`}
+              >
+                <ActiveIcon size={14} />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* SECTION 1: ANALYTICS SUB TAB */}
+        {activeSubTab === "analytics" && (
+          <div className="space-y-6">
+            
+            {/* Overview Counters */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-surface border border-border p-4 rounded-xl flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] text-text-secondary uppercase block font-bold">Total Platform Revenue</span>
+                  <span className="text-xl font-extrabold text-accent font-mono mt-1 block">₹{totalRevenue.toLocaleString()}</span>
+                </div>
+                <DollarSign size={20} className="text-accent" />
+              </div>
+              <div className="bg-surface border border-border p-4 rounded-xl flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] text-text-secondary uppercase block font-bold">Total Rosters</span>
+                  <span className="text-xl font-extrabold text-text-primary font-mono mt-1 block">{teams.length}</span>
+                </div>
+                <Users size={20} className="text-accent" />
+              </div>
+              <div className="bg-surface border border-border p-4 rounded-xl flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] text-text-secondary uppercase block font-bold">Live Leagues</span>
+                  <span className="text-xl font-extrabold text-red-400 font-mono mt-1 block">
+                    {tournaments.filter(t => t.status === "ongoing").length}
+                  </span>
+                </div>
+                <Play size={20} className="text-red-400" />
+              </div>
+              <div className="bg-surface border border-border p-4 rounded-xl flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] text-text-secondary uppercase block font-bold">Approved Players</span>
+                  <span className="text-xl font-extrabold text-green-400 font-mono mt-1 block">{approvedPlayersCount.toLocaleString()}</span>
+                </div>
+                <CheckSquare size={20} className="text-green-400" />
+              </div>
+            </div>
+
+            {/* Recharts Area Plot */}
+            <div className="bg-surface border border-border rounded-2xl p-6 space-y-4">
+              <h3 className="text-sm font-bold font-display text-text-primary uppercase tracking-wider">
+                30-Day Platform Revenue Growth
+              </h3>
+              <div className="h-60 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={revenueTrendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="colorAmt" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="var(--accent)" stopOpacity={0.2}/>
+                        <stop offset="95%" stopColor="var(--accent)" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <XAxis dataKey="day" stroke="#52525b" fontSize={10} tickLine={false} />
+                    <YAxis stroke="#52525b" fontSize={10} tickLine={false} />
+                    <Tooltip contentStyle={{ backgroundColor: "#111118", borderColor: "#1e1e2e" }} />
+                    <Area type="monotone" dataKey="amount" stroke="var(--accent)" fillOpacity={1} fill="url(#colorAmt)" strokeWidth={2} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+          </div>
+        )}
+
+        {/* SECTION 2: PAYMENT QUEUE SUB TAB */}
+        {activeSubTab === "payments" && (
+          <div className="bg-surface border border-border rounded-2xl p-5 overflow-hidden">
+            <h3 className="text-sm font-bold font-display text-text-primary uppercase tracking-wider mb-4">
+              Submitted Roster Registrations Queue
+            </h3>
+
+            {registrationsWithPayments.filter(r => r.payment_status === "pending").length === 0 ? (
+              <div className="py-12 text-center text-xs text-text-secondary">
+                No registrations awaiting verification.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-border text-text-secondary uppercase tracking-wider text-[10px] font-bold">
+                      <th className="py-3 px-4">Squad ID</th>
+                      <th className="py-3 px-4">UTR Number</th>
+                      <th className="py-3 px-4">Screenshots</th>
+                      <th className="py-3 px-4 text-center">Amount</th>
+                      <th className="py-3 px-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/40 font-mono">
+                    {registrationsWithPayments.filter(r => r.payment_status === "pending").map((reg) => (
+                      <tr key={reg.id} className="hover:bg-background/20 transition">
+                        <td className="py-3.5 px-4 font-sans font-bold">
+                          {teams.find(t => t.id === reg.team_id)?.name || "Unknown"}
+                        </td>
+                        <td className="py-3.5 px-4 font-mono text-text-primary font-bold">
+                          {reg.utr_number || "NO UTR PROVIDED"}
+                        </td>
+                        <td className="py-3.5 px-4">
+                          {reg.payment_screenshot_url && (
+                            <a
+                              href={reg.payment_screenshot_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-accent font-semibold hover:underline flex items-center gap-1"
+                            >
+                              <span>View Receipt 🔍</span>
+                            </a>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4 text-center text-text-primary font-bold">
+                          ₹{reg.payment_amount}
+                        </td>
+                        <td className="py-3.5 px-4 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => handleApprovePayment(reg.id)}
+                              className="p-1.5 bg-green-500/10 border border-green-500/30 text-green-400 rounded-lg hover:bg-green-500/20 transition"
+                              title="Approve Entry"
+                            >
+                              <Check size={14} />
+                            </button>
+                            <button
+                              onClick={() => handleRejectPayment(reg.id)}
+                              className="p-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg hover:bg-red-500/20 transition"
+                              title="Reject Entry"
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* SECTION 3: TOURNAMENT CREATOR SUB TAB */}
+        {activeSubTab === "tournaments" && (
+          <div className="max-w-xl mx-auto bg-surface border border-border rounded-2xl p-6 sm:p-8 space-y-6">
+            <div>
+              <h3 className="text-base font-bold font-display text-text-primary uppercase tracking-wide">
+                Construct Arena Tournament
+              </h3>
+              <p className="text-xs text-text-secondary">
+                Publish a new tournament. Points configs will load dynamically from primary games metadata.
+              </p>
+            </div>
+
+            <form onSubmit={handleCreateTournament} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider block">
+                  Tournament League Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Valorant Challengers Cup, FF Grand Masters"
+                  value={newTourneyName}
+                  onChange={(e) => setNewTourneyName(e.target.value)}
+                  className="w-full bg-background border border-border rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-accent text-text-primary"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider block">
+                    Format Game Config
+                  </label>
+                  <select
+                    value={newTourneyGame}
+                    onChange={(e) => setNewTourneyGame(e.target.value)}
+                    className="w-full bg-background border border-border rounded-xl px-3 py-3 text-xs focus:outline-none focus:border-accent text-text-primary cursor-pointer"
+                  >
+                    {games.map(g => (
+                      <option key={g.id} value={g.id}>{g.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider block">
+                    Capacity (Max Teams)
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    value={newTourneyCapacity}
+                    onChange={(e) => setNewTourneyCapacity(Number(e.target.value))}
+                    className="w-full bg-background border border-border rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-accent text-text-primary"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider block">
+                    Entry Fee (INR)
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    value={newTourneyFee}
+                    onChange={(e) => setNewTourneyFee(Number(e.target.value))}
+                    className="w-full bg-background border border-border rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-accent text-text-primary"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider block">
+                    Prize Pool (INR)
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    value={newTourneyPrize}
+                    onChange={(e) => setNewTourneyPrize(Number(e.target.value))}
+                    className="w-full bg-background border border-border rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-accent text-text-primary"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider block">
+                  Qualifier Spots Count (Top N Advance)
+                </label>
+                <input
+                  type="number"
+                  required
+                  value={newTourneyQualifiers}
+                  onChange={(e) => setNewTourneyQualifiers(Number(e.target.value))}
+                  className="w-full bg-background border border-border rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-accent text-text-primary"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider block">
+                  Regulations Rule Sheet
+                </label>
+                <textarea
+                  placeholder="Insert custom rules, map structures, schedules..."
+                  value={newTourneyRules}
+                  onChange={(e) => setNewTourneyRules(e.target.value)}
+                  className="w-full bg-background border border-border rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-accent text-text-primary h-24 resize-none"
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="w-full bg-red-500 hover:bg-red-600 text-white py-3 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 hover:scale-[1.01] transition cursor-pointer"
+              >
+                <span>Construct Arena League</span>
+                <Plus size={14} />
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* SECTION 4: MATCH ROOMS CONTROL AND RESULTS SPREADSHEET */}
+        {activeSubTab === "matches" && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            {/* Left selector pane */}
+            <div className="space-y-4">
+              <div className="bg-surface border border-border rounded-2xl p-5 space-y-4">
+                <h3 className="text-xs font-bold font-display text-text-primary uppercase tracking-widest">
+                  Configure Matches
+                </h3>
+
+                <div className="space-y-3.5">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-text-secondary uppercase">League Selector</label>
+                    <select
+                      value={selectedTourneyId}
+                      onChange={(e) => { setSelectedTourneyId(e.target.value); setSelectedRoomId(""); }}
+                      className="w-full bg-background border border-border rounded-lg px-2.5 py-2 text-xs focus:outline-none focus:border-accent text-text-primary cursor-pointer"
+                    >
+                      {tournaments.map(t => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleGenerateGroups}
+                      className="flex-1 bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white border border-red-500/30 p-2.5 rounded-lg text-xs font-bold uppercase transition flex items-center justify-center gap-1.5"
+                    >
+                      <Layers size={14} />
+                      <span>Generate Groups</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Match rooms listing */}
+              <div className="bg-surface border border-border rounded-2xl p-5 space-y-3">
+                <h3 className="text-xs font-bold font-display text-text-primary uppercase tracking-widest">
+                  Active Rooms Draw
+                </h3>
+
+                {rooms.filter(r => r.tournament_id === selectedTourneyId).length === 0 ? (
+                  <p className="text-xs text-text-secondary italic">Draw not conducted. Click Generate Groups above.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {rooms.filter(r => r.tournament_id === selectedTourneyId).map((room) => (
+                      <button
+                        key={room.id}
+                        onClick={() => setSelectedRoomId(room.id)}
+                        className={`w-full p-3 border rounded-xl text-left flex justify-between items-center transition ${
+                          selectedRoomId === room.id
+                            ? "bg-red-500/10 border-red-500/50 text-red-400"
+                            : "bg-background/50 border-border hover:border-border/80 text-text-primary"
+                        }`}
+                      >
+                        <div className="flex flex-col">
+                          <span className="text-xs font-bold">{room.room_label}</span>
+                          <span className="text-[9px] uppercase tracking-wider mt-0.5 opacity-60">
+                            {room.round_type === "grand_final" ? "Finals Round" : "Qualifiers"}
+                          </span>
+                        </div>
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded font-mono font-bold uppercase ${
+                          room.status === "completed" ? "bg-slate-500/10 text-slate-400" : "bg-green-500/10 text-green-400"
+                        }`}>
+                          {room.status}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Winners Podium Widget */}
+              {selectedTourney && (
+                <div className="bg-gradient-to-tr from-yellow-500/10 via-background to-surface border border-yellow-500/30 rounded-2xl p-5 space-y-4 shadow-[0_0_20px_rgba(234,179,8,0.05)]">
+                  <h3 className="text-xs font-bold font-display text-yellow-400 uppercase tracking-widest flex items-center gap-1.5">
+                    <Trophy size={14} /> Winners Podium
+                  </h3>
+                  
+                  {selectedTourney.status === "completed" ? (
+                    <div className="space-y-3">
+                      <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-xl text-xs space-y-2">
+                        <p className="text-yellow-400 font-bold uppercase tracking-wider text-[10px]">🏆 Tournament Completed</p>
+                        <div className="space-y-1 text-text-primary">
+                          <p>
+                            Champion: <span className="font-semibold">{teams.find(t => t.id === selectedTourney.champion_team_id)?.name || "N/A"}</span>
+                          </p>
+                          <p>
+                            Runner Up: <span className="font-semibold">{teams.find(t => t.id === selectedTourney.runner_up_team_id)?.name || "N/A"}</span>
+                          </p>
+                          <p>
+                            MVP Player: <span className="font-semibold font-sans">{db.getProfiles().find(p => p.id === selectedTourney.mvp_player_id)?.name || "N/A"}</span>
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-3 text-xs">
+                      <p className="text-[10px] text-text-secondary">
+                        Close matches and dispatch final tournament standings to the public channel.
+                      </p>
+                      
+                      <div className="space-y-2">
+                        <div className="space-y-1">
+                          <label className="text-[10px] text-text-secondary uppercase font-semibold">Champion Team</label>
+                          <select
+                            value={podiumChampionId}
+                            onChange={(e) => setPodiumChampionId(e.target.value)}
+                            className="w-full bg-background border border-border rounded-lg px-2.5 py-2 text-xs focus:outline-none focus:border-yellow-500 text-text-primary cursor-pointer font-sans"
+                          >
+                            <option value="">-- Select Champion --</option>
+                            {registeredTeams.map(t => (
+                              <option key={t.id} value={t.id}>{t.name}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] text-text-secondary uppercase font-semibold">Runner Up Team</label>
+                          <select
+                            value={podiumRunnerUpId}
+                            onChange={(e) => setPodiumRunnerUpId(e.target.value)}
+                            className="w-full bg-background border border-border rounded-lg px-2.5 py-2 text-xs focus:outline-none focus:border-yellow-500 text-text-primary cursor-pointer font-sans"
+                          >
+                            <option value="">-- Select Runner Up --</option>
+                            {registeredTeams.map(t => (
+                              <option key={t.id} value={t.id}>{t.name}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] text-text-secondary uppercase font-semibold">Tournament MVP</label>
+                          <select
+                            value={podiumMvpId}
+                            onChange={(e) => setPodiumMvpId(e.target.value)}
+                            className="w-full bg-background border border-border rounded-lg px-2.5 py-2 text-xs focus:outline-none focus:border-yellow-500 text-text-primary cursor-pointer font-sans"
+                          >
+                            <option value="">-- Select MVP Player --</option>
+                            {registeredPlayers.map(p => (
+                              <option key={p.id} value={p.id}>{p.name} ({p.telegram_username ? `@${p.telegram_username}` : "No TG"})</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={handleDeclareWinners}
+                        disabled={!podiumChampionId || !podiumRunnerUpId || !podiumMvpId}
+                        className="w-full bg-yellow-500 hover:bg-yellow-600 disabled:opacity-40 disabled:cursor-not-allowed text-black py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 hover:scale-[1.01] transition duration-200 cursor-pointer"
+                      >
+                        <Award size={14} />
+                        <span>Declare Winners & Close League</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Right credentials + Results entry spreadsheet pane */}
+            <div className="lg:col-span-2 space-y-4">
+              
+              {selectedRoomId ? (
+                <div className="bg-surface border border-border rounded-2xl p-5 space-y-6">
+                  
+                  {/* Part A: Set room custom ID & Password */}
+                  <div className="space-y-4 border-b border-border/40 pb-5">
+                    <h3 className="text-xs font-bold font-display text-text-primary uppercase tracking-widest">
+                      1. Dispatch Room Credentials
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-text-secondary uppercase">In-Game Room ID</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. 9812741"
+                          value={roomCredentialsCode}
+                          onChange={(e) => setRoomCredentialsCode(e.target.value)}
+                          className="w-full bg-background border border-border rounded-xl px-3.5 py-2 text-xs focus:outline-none focus:border-accent text-text-primary font-mono"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-text-secondary uppercase">Password</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. 54321"
+                          value={roomCredentialsPass}
+                          onChange={(e) => setRoomCredentialsPass(e.target.value)}
+                          className="w-full bg-background border border-border rounded-xl px-3.5 py-2 text-xs focus:outline-none focus:border-accent text-text-primary font-mono"
+                        />
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleSaveRoomCredentials}
+                      className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition cursor-pointer"
+                    >
+                      <Save size={14} />
+                      <span>Lock & Broadcast Room Info</span>
+                    </button>
+                  </div>
+
+                  {/* Part B: Match results spreadsheet sheet */}
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                      <h3 className="text-xs font-bold font-display text-text-primary uppercase tracking-widest">
+                        2. Results spreadsheet Entry Sheet
+                      </h3>
+                      <span className="text-[10px] text-text-secondary">Points configs auto-calculated</span>
+                    </div>
+
+                    {resultsRows.length === 0 ? (
+                      <p className="text-xs text-text-secondary italic">No seeded teams assigned to this room draw.</p>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left border-collapse text-xs">
+                            <thead>
+                              <tr className="border-b border-border text-text-secondary uppercase text-[9px] font-bold">
+                                <th className="py-2 px-1">Team Name</th>
+                                <th className="py-2 px-1 text-center w-24">Placement Rank</th>
+                                <th className="py-2 px-1 text-center w-24">Kills count</th>
+                                <th className="py-2 px-1 text-right w-24">Total Match Points</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-border/20 font-mono">
+                              {resultsRows.map((row) => (
+                                <tr key={row.teamId}>
+                                  <td className="py-2.5 px-1 font-sans font-bold text-text-primary">
+                                    {teams.find(t => t.id === row.teamId)?.name || "Unknown"}
+                                  </td>
+                                  <td className="py-2 px-1">
+                                    <input
+                                      type="number"
+                                      min={1}
+                                      value={row.position}
+                                      onChange={(e) => handleResultsRowChange(row.teamId, "position", Number(e.target.value))}
+                                      className="w-16 mx-auto block bg-background border border-border rounded px-1.5 py-1 text-center font-mono focus:outline-none focus:border-accent"
+                                    />
+                                  </td>
+                                  <td className="py-2 px-1">
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      value={row.kills}
+                                      onChange={(e) => handleResultsRowChange(row.teamId, "kills", Number(e.target.value))}
+                                      className="w-16 mx-auto block bg-background border border-border rounded px-1.5 py-1 text-center font-mono focus:outline-none focus:border-accent"
+                                    />
+                                  </td>
+                                  <td className="py-2.5 px-1 text-right text-accent font-extrabold">
+                                    {row.totalPoints}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        <button
+                          onClick={handleSaveMatchResults}
+                          className="bg-red-500 hover:bg-red-600 text-white px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition cursor-pointer mt-2"
+                        >
+                          <FileText size={14} />
+                          <span>Publish Match Results</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                </div>
+              ) : (
+                <div className="bg-surface border border-border rounded-2xl p-12 text-center text-text-secondary h-full flex flex-col justify-center items-center">
+                  <Sparkles size={32} className="opacity-30 mb-2" />
+                  <p className="text-xs">Select a generated Room draw from the list to update credentials or compile result sheets.</p>
+                </div>
+              )}
+
+            </div>
+          </div>
+        )}
+
+      </div>
+    </Shell>
+  );
+}
