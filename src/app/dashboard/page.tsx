@@ -42,31 +42,10 @@ export default function Dashboard() {
   const [earningsText, setEarningsText] = useState("₹0");
   const [performanceTrend, setPerformanceTrend] = useState<{ name: string; kills: number; placement: number }[]>([]);
 
-  // Onboarding edit states
-  const [isOnboarding, setIsOnboarding] = useState(false);
-  const [editName, setEditName] = useState("");
-  const [editPhone, setEditPhone] = useState("");
-  const [editCity, setEditCity] = useState("");
-  const [editUid, setEditUid] = useState("");
-  const [editTg, setEditTg] = useState("");
-
   const loadProfile = () => {
     if (!db) return;
     const currentUser = db.getCurrentUser();
     setUser(currentUser);
-    
-    setEditName(currentUser.name || "");
-    setEditPhone(currentUser.phone || "");
-    setEditCity(currentUser.city || "");
-    setEditUid(currentUser.game_uid || "");
-    setEditTg(currentUser.telegram_username || "");
-
-    // Check if onboarding is needed
-    if (!currentUser.phone || !currentUser.city || !currentUser.game_uid) {
-      setIsOnboarding(true);
-    } else {
-      setIsOnboarding(false);
-    }
 
     // Get user teams where they are captain or approved member
     const allTeams = db.getTeams();
@@ -212,21 +191,6 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, [activeTourney, rooms]);
 
-  const handleSaveProfile = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!db) return;
-
-    db.updateProfile({
-      name: editName,
-      phone: editPhone,
-      city: editCity,
-      game_uid: editUid,
-      telegram_username: editTg
-    });
-
-    setIsOnboarding(false);
-    loadProfile();
-  };
 
   const handleTestNotification = () => {
     if (!user || !user.telegram_id || !db) return;
@@ -256,86 +220,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* PROFILE SETUP ONBOARDING CARD */}
-        {isOnboarding && (
-          <div className="bg-gradient-to-br from-accent/5 to-transparent border border-accent/30 rounded-2xl p-6 space-y-4 animate-in fade-in duration-300">
-            <div className="flex items-center gap-2 border-b border-border/40 pb-2">
-              <Sparkles className="text-accent" size={18} />
-              <h3 className="text-sm font-bold font-display uppercase tracking-wider text-text-primary">
-                Step 2: Profile Setup
-              </h3>
-            </div>
-            <p className="text-xs text-text-secondary">
-              Please finalize your gamer registry credentials to join and assemble teams.
-            </p>
-
-            <form onSubmit={handleSaveProfile} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 pt-2">
-              <div className="space-y-1">
-                <label className="text-[10px] uppercase font-bold text-text-secondary flex items-center gap-1"><Smile size={10} /> Name</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Gamer Name"
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  className="w-full bg-background border border-border rounded-lg px-2.5 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] uppercase font-bold text-text-secondary flex items-center gap-1"><Smartphone size={10} /> Phone</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="+91..."
-                  value={editPhone}
-                  onChange={(e) => setEditPhone(e.target.value)}
-                  className="w-full bg-background border border-border rounded-lg px-2.5 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] uppercase font-bold text-text-secondary flex items-center gap-1"><MapPin size={10} /> City</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Mumbai..."
-                  value={editCity}
-                  onChange={(e) => setEditCity(e.target.value)}
-                  className="w-full bg-background border border-border rounded-lg px-2.5 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] uppercase font-bold text-text-secondary flex items-center gap-1"><Tag size={10} /> Game UID</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="UID e.g. 5812948"
-                  value={editUid}
-                  onChange={(e) => setEditUid(e.target.value)}
-                  className="w-full bg-background border border-border rounded-lg px-2.5 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent font-mono"
-                />
-              </div>
-              <div className="space-y-1 flex flex-col justify-between">
-                <label className="text-[10px] uppercase font-bold text-text-secondary flex items-center gap-1"><MessageSquare size={10} /> Telegram User</label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    required
-                    placeholder="@username"
-                    value={editTg}
-                    onChange={(e) => setEditTg(e.target.value)}
-                    className="flex-1 bg-background border border-border rounded-lg px-2.5 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent"
-                  />
-                  <button
-                    type="submit"
-                    className="bg-accent text-black font-bold text-xs uppercase px-3 rounded-lg hover:bg-accent-hover transition cursor-pointer"
-                  >
-                    Save
-                  </button>
-                </div>
-              </div>
-            </form>
-          </div>
-        )}
 
         {/* Hero Stats Grid */}
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3.5">

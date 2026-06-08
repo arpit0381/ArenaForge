@@ -14,6 +14,10 @@ export default function RegisterPage() {
   const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [phone, setPhone] = useState("");
+  const [city, setCity] = useState("");
+  const [gameUid, setGameUid] = useState("");
+  const [telegramUsername, setTelegramUsername] = useState("");
+  const [role, setRole] = useState<"player" | "admin">("player");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -22,8 +26,16 @@ export default function RegisterPage() {
     setError("");
     setLoading(true);
 
-    if (!email.trim() || !password.trim() || !username.trim() || !displayName.trim()) {
-      setError("Please fill in all fields.");
+    if (
+      !email.trim() ||
+      !password.trim() ||
+      !username.trim() ||
+      !displayName.trim() ||
+      !phone.trim() ||
+      !city.trim() ||
+      !gameUid.trim()
+    ) {
+      setError("Please fill in all required fields.");
       setLoading(false);
       return;
     }
@@ -64,11 +76,11 @@ export default function RegisterPage() {
         display_name: displayName.trim(),
         avatar_url: `https://api.dicebear.com/7.x/pixel-art/svg?seed=${username}`,
         phone: phone.trim(),
-        city: "",
-        game_uid: "",
-        telegram_username: "",
+        city: city.trim(),
+        game_uid: gameUid.trim(),
+        telegram_username: telegramUsername.trim() || null,
         telegram_id: null,
-        role: "player" as const,
+        role: role,
         created_at: new Date().toISOString()
       };
 
@@ -148,131 +160,228 @@ export default function RegisterPage() {
       </div>
 
       {/* Right side: Register form */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12 relative">
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12 relative overflow-y-auto">
         <div className="absolute inset-0 bg-gradient-to-tr from-purple-950/10 via-transparent to-accent/5 lg:hidden" />
 
-        <div className="w-full max-w-md space-y-8 z-10">
+        <div className="w-full max-w-md space-y-8 z-10 my-8">
           <div className="space-y-2">
             <h2 className="text-3xl font-bold font-display uppercase tracking-wide">
               Create Profile
             </h2>
             <p className="text-xs text-text-secondary">
-              Set up your fighter card and join teams.
+              Set up your fighter card and select your role.
             </p>
           </div>
 
-          <form onSubmit={handleRegister} className="space-y-5">
+          <form onSubmit={handleRegister} className="space-y-4">
             {error && (
               <div className="p-3.5 bg-red-500/10 border border-red-500/30 rounded-xl text-xs text-red-400 font-semibold animate-shake">
                 ⚠️ {error}
               </div>
             )}
 
+            {/* Role Switcher tabs */}
             <div className="space-y-1.5">
               <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider block">
-                Email Address
+                Register As
               </label>
-              <div className="relative">
-                <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-text-secondary/60">
-                  <Mail size={16} />
-                </span>
-                <input
-                  type="email"
-                  required
-                  placeholder="e.g. aditya@mail.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-surface border border-border rounded-xl pl-10 pr-4 py-3 text-xs focus:outline-none focus:border-accent text-text-primary transition-colors"
-                />
+              <div className="grid grid-cols-2 gap-2 bg-surface p-1 rounded-xl border border-border">
+                <button
+                  type="button"
+                  onClick={() => setRole("player")}
+                  className={`py-2 text-xs font-bold uppercase rounded-lg transition-all ${
+                    role === "player"
+                      ? "bg-accent text-black font-extrabold shadow"
+                      : "text-text-secondary hover:text-text-primary"
+                  }`}
+                >
+                  Player / Captain
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRole("admin")}
+                  className={`py-2 text-xs font-bold uppercase rounded-lg transition-all ${
+                    role === "admin"
+                      ? "bg-red-500 text-white font-extrabold shadow"
+                      : "text-text-secondary hover:text-text-primary"
+                  }`}
+                >
+                  Organizer / Admin
+                </button>
               </div>
             </div>
 
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider block">
-                Password
-              </label>
-              <div className="relative">
-                <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-text-secondary/60">
-                  <Lock size={16} />
-                </span>
-                <input
-                  type="password"
-                  required
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-surface border border-border rounded-xl pl-10 pr-4 py-3 text-xs focus:outline-none focus:border-accent text-text-primary transition-colors"
-                />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider block">
+                  Email Address
+                </label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-text-secondary/60">
+                    <Mail size={14} />
+                  </span>
+                  <input
+                    type="email"
+                    required
+                    placeholder="e.g. aditya@mail.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full bg-surface border border-border rounded-xl pl-8 pr-3 py-2.5 text-xs focus:outline-none focus:border-accent text-text-primary transition-colors"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider block">
+                  Password
+                </label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-text-secondary/60">
+                    <Lock size={14} />
+                  </span>
+                  <input
+                    type="password"
+                    required
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full bg-surface border border-border rounded-xl pl-8 pr-3 py-2.5 text-xs focus:outline-none focus:border-accent text-text-primary transition-colors"
+                  />
+                </div>
               </div>
             </div>
 
-            <div className="space-y-1.5 border-t border-border/25 pt-3">
-              <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider block">
-                Username (Lower case)
-              </label>
-              <div className="relative">
-                <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-text-secondary/60">
-                  <User size={16} />
-                </span>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. aditya_gamer"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  className="w-full bg-surface border border-border rounded-xl pl-10 pr-4 py-3 text-xs focus:outline-none focus:border-accent text-text-primary transition-colors"
-                />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider block">
+                  Username
+                </label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-text-secondary/60">
+                    <User size={14} />
+                  </span>
+                  <input
+                    type="text"
+                    required
+                    placeholder="aditya_gamer"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    className="w-full bg-surface border border-border rounded-xl pl-8 pr-3 py-2.5 text-xs focus:outline-none focus:border-accent text-text-primary transition-colors font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider block">
+                  Nickname (In-Game)
+                </label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-text-secondary/60">
+                    <Edit size={14} />
+                  </span>
+                  <input
+                    type="text"
+                    required
+                    placeholder="ADITYA・FF"
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    className="w-full bg-surface border border-border rounded-xl pl-8 pr-3 py-2.5 text-xs focus:outline-none focus:border-accent text-text-primary transition-colors"
+                  />
+                </div>
               </div>
             </div>
 
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider block">
-                Display Name (In-Game Nickname)
-              </label>
-              <div className="relative">
-                <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-text-secondary/60">
-                  <Edit size={16} />
-                </span>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. ADITYA・FF"
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
-                  className="w-full bg-surface border border-border rounded-xl pl-10 pr-4 py-3 text-xs focus:outline-none focus:border-accent text-text-primary transition-colors"
-                />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider block">
+                  Phone Number
+                </label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-text-secondary/60">
+                    <Phone size={14} />
+                  </span>
+                  <input
+                    type="tel"
+                    required
+                    placeholder="+91..."
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    className="w-full bg-surface border border-border rounded-xl pl-8 pr-3 py-2.5 text-xs focus:outline-none focus:border-accent text-text-primary transition-colors font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider block">
+                  City / Location
+                </label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-text-secondary/60">
+                    <Edit size={14} />
+                  </span>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Mumbai, IN"
+                    value={city}
+                    onChange={(e) => setCity(e.target.value)}
+                    className="w-full bg-surface border border-border rounded-xl pl-8 pr-3 py-2.5 text-xs focus:outline-none focus:border-accent text-text-primary transition-colors"
+                  />
+                </div>
               </div>
             </div>
 
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider block">
-                Phone Number
-              </label>
-              <div className="relative">
-                <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-text-secondary/60">
-                  <Phone size={16} />
-                </span>
-                <input
-                  type="tel"
-                  required
-                  placeholder="e.g. +91 98765 43210"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  className="w-full bg-surface border border-border rounded-xl pl-10 pr-4 py-3 text-xs focus:outline-none focus:border-accent text-text-primary transition-colors"
-                />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider block">
+                  Game UID (Character ID)
+                </label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-text-secondary/60">
+                    <Edit size={14} />
+                  </span>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. 5812948"
+                    value={gameUid}
+                    onChange={(e) => setGameUid(e.target.value)}
+                    className="w-full bg-surface border border-border rounded-xl pl-8 pr-3 py-2.5 text-xs focus:outline-none focus:border-accent text-text-primary transition-colors font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider block">
+                  Telegram Username
+                </label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-text-secondary/60">
+                    <Mail size={14} />
+                  </span>
+                  <input
+                    type="text"
+                    placeholder="@aditya_tg (optional)"
+                    value={telegramUsername}
+                    onChange={(e) => setTelegramUsername(e.target.value)}
+                    className="w-full bg-surface border border-border rounded-xl pl-8 pr-3 py-2.5 text-xs focus:outline-none focus:border-accent text-text-primary transition-colors"
+                  />
+                </div>
               </div>
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-accent hover:bg-accent-hover text-black py-3 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 hover:scale-[1.01] active:scale-[0.99] transition duration-200 cursor-pointer disabled:opacity-50"
+              className={`w-full text-black py-3 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 hover:scale-[1.01] active:scale-[0.99] transition duration-200 cursor-pointer disabled:opacity-50 ${
+                role === "admin" ? "bg-red-500 hover:bg-red-600 text-white" : "bg-accent hover:bg-accent-hover"
+              }`}
             >
               {loading ? (
-                <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
               ) : (
                 <>
-                  <span>Construct Card</span>
+                  <span>Create Fighter Profile</span>
                   <ArrowRight size={14} />
                 </>
               )}

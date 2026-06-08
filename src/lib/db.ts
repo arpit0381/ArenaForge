@@ -331,6 +331,15 @@ export class LocalDatabase {
     this.dbWrite("users", "upsert", updated);
   }
 
+  updateUserRole(userId: string, newRole: "player" | "admin") {
+    const profile = this.profiles.find(p => p.id === userId);
+    if (!profile) return;
+    profile.role = newRole;
+    this.profiles = this.profiles.map(p => p.id === userId ? { ...profile } : p);
+    this.save();
+    this.dbWrite("users", "upsert", profile);
+  }
+
   linkTelegram(telegramUsername: string, chatId: number) {
     const user = this.getCurrentUser();
     if (!user.id) return;

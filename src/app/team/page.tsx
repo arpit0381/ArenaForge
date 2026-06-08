@@ -7,7 +7,8 @@ import { Team, Game, TeamMember, User } from "@/types/database.types";
 import { Plus, Users, Shield, Award, Check, X, Gamepad2, ArrowRight } from "lucide-react";
 
 export default function TeamManagementPage() {
-  const [teams, setTeams] = useState<Team[]>([]);
+  const [captainedTeams, setCaptainedTeams] = useState<Team[]>([]);
+  const [joinedTeams, setJoinedTeams] = useState<Team[]>([]);
   const [games, setGames] = useState<Game[]>([]);
   const [profiles, setProfiles] = useState<User[]>([]);
   const [activeTab, setActiveTab] = useState<"list" | "create" | "join">("list");
@@ -23,9 +24,20 @@ export default function TeamManagementPage() {
   const loadData = () => {
     if (!db) return;
     const currentUser = db.getCurrentUser();
+    const allTeams = db.getTeams();
+    
     // Load teams captained by current user
-    const userTeams = db.getTeams().filter(t => t.captain_id === currentUser.id);
-    setTeams(userTeams);
+    const userCapTeams = allTeams.filter(t => t.captain_id === currentUser.id);
+    setCaptainedTeams(userCapTeams);
+    
+    // Load teams user has joined or requested to join
+    const userJoinTeams = allTeams.filter(t => {
+      if (t.captain_id === currentUser.id) return false;
+      const members = db.getTeamMembers(t.id);
+      return members.some(m => m.player_id === currentUser.id);
+    });
+    setJoinedTeams(userJoinTeams);
+    
     setGames(db.getGames());
     setProfiles(db.getProfiles());
   };
@@ -107,8 +119,8 @@ export default function TeamManagementPage() {
 
   const getRosterSizeText = (gameId: string | null) => {
     if (!gameId) return "4 Players";
-    if (gameId === "bf81850d-d421-4ea9-a111-ce1515bb5c81") return "10 Players Room (FF Mode)";
-    if (gameId === "e12bd84d-2df9-4c12-841f-1ad078d10b72") return "25 Players Room (BGMI Mode)";
+    if (gameId === "bf81850d-d421-4ea9-a111-ce1515bb5c81") return "10 Teams Room (FF Mode)";
+    if (gameId === "e12bd84d-2df9-4c12-841f-1ad078d10b72") return "25 Teams Room (BGMI Mode)";
     if (gameId === "c26be6fd-1d88-43e5-8b83-a9d02f5a5423") return "5v5 (Valorant Mode)";
     return "4 Players";
   };
@@ -121,6 +133,13 @@ export default function TeamManagementPage() {
   const getPlayerUID = (playerId: string) => {
     const p = profiles.find(profile => profile.id === playerId);
     return p ? p.game_uid || "No UID" : "No UID";
+  };
+
+  const getMemberStatus = (teamId: string) => {
+    if (!db) return "pending";
+    const currentUser = db.getCurrentUser();
+    const match = db.getTeamMembers(teamId).find(m => m.player_id === currentUser.id);
+    return match ? match.status : "pending";
   };
 
   return (
@@ -189,11 +208,11 @@ export default function TeamManagementPage() {
         {activeTab === "list" && (
           <div className="space-y-6">
             
-            {teams.length === 0 ? (
+            {captainedTeams.length === 0 && joinedTeams.length === 0 ? (
               <div className="bg-surface border border-border rounded-2xl p-12 text-center text-text-secondary">
                 <Users size={36} className="mx-auto opacity-30 mb-3" />
                 <h3 className="font-display font-semibold text-text-primary uppercase tracking-wider text-base">
-                  No active teams captained by you
+                  No active squads found
                 </h3>
                 <p className="text-xs mt-1 max-w-sm mx-auto">
                   Get started by creating your esports squad or joining a captain&apos;s squad with their Team Code.
@@ -217,47 +236,113 @@ export default function TeamManagementPage() {
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 
                 {/* Teams List */}
-                <div className="lg:col-span-2 space-y-4">
-                  {teams.map((team) => {
-                    if (!db) return null;
-                    const members = db.getTeamMembers(team.id).filter(m => m.status === "approved");
-                    return (
-                      <div
-                        key={team.id}
-                        className="bg-surface border border-border hover:border-accent/30 rounded-2xl p-5 space-y-4 hover:scale-[1.01] transition duration-200"
-                      >
-                        <div className="flex items-center justify-between border-b border-border/40 pb-3">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-background border border-border rounded-xl flex items-center justify-center p-1 overflow-hidden">
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={team.logo_url || ""} alt="" className="w-full h-full" />
-                            </div>
-                            <div>
-                              <h3 className="font-bold text-text-primary text-sm uppercase tracking-wide">{team.name}</h3>
-                              <span className="text-[10px] text-accent font-semibold">{getGameName(team.primary_game)}</span>
-                            </div>
-                          </div>
-                          <div className="flex flex-col items-end">
-                            <span className="text-[9px] text-text-secondary uppercase font-bold">Team Code</span>
-                            <span className="font-mono text-accent font-extrabold text-sm tracking-wider select-all">{team.tag}</span>
-                          </div>
-                        </div>
-
-                        {/* Roster members list */}
-                        <div className="space-y-2">
-                          <h4 className="text-[10px] text-text-secondary uppercase font-bold tracking-widest">Approved Roster ({members.length})</h4>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            {members.map(m => (
-                              <div key={m.id} className="p-2.5 bg-background/50 border border-border/60 rounded-xl flex items-center justify-between text-xs">
-                                <span className="font-bold text-text-primary">{getPlayerName(m.player_id)}</span>
-                                <span className="text-[9px] text-text-secondary font-mono">UID: {getPlayerUID(m.player_id)}</span>
+                <div className="lg:col-span-2 space-y-6">
+                  {/* Section A: Captained Teams */}
+                  {captainedTeams.length > 0 && (
+                    <div className="space-y-4">
+                      <h3 className="text-xs font-bold font-display uppercase tracking-widest text-text-secondary/60">
+                        Teams You Captain ({captainedTeams.length})
+                      </h3>
+                      {captainedTeams.map((team) => {
+                        if (!db) return null;
+                        const members = db.getTeamMembers(team.id).filter(m => m.status === "approved");
+                        return (
+                          <div
+                            key={team.id}
+                            className="bg-surface border border-border hover:border-accent/30 rounded-2xl p-5 space-y-4 hover:scale-[1.01] transition duration-200"
+                          >
+                            <div className="flex items-center justify-between border-b border-border/40 pb-3">
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-background border border-border rounded-xl flex items-center justify-center p-1 overflow-hidden">
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img src={team.logo_url || ""} alt="" className="w-full h-full" />
+                                </div>
+                                <div>
+                                  <h3 className="font-bold text-text-primary text-sm uppercase tracking-wide">{team.name}</h3>
+                                  <span className="text-[10px] text-accent font-semibold">{getGameName(team.primary_game)}</span>
+                                </div>
                               </div>
-                            ))}
+                              <div className="flex flex-col items-end">
+                                <span className="text-[9px] text-text-secondary uppercase font-bold">Team Code</span>
+                                <span className="font-mono text-accent font-extrabold text-sm tracking-wider select-all">{team.tag}</span>
+                              </div>
+                            </div>
+
+                            {/* Roster members list */}
+                            <div className="space-y-2">
+                              <h4 className="text-[10px] text-text-secondary uppercase font-bold tracking-widest">Approved Roster ({members.length})</h4>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                {members.map(m => (
+                                  <div key={m.id} className="p-2.5 bg-background/50 border border-border/60 rounded-xl flex items-center justify-between text-xs">
+                                    <span className="font-bold text-text-primary">{getPlayerName(m.player_id)}</span>
+                                    <span className="text-[9px] text-text-secondary font-mono">UID: {getPlayerUID(m.player_id)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Section B: Joined Teams */}
+                  {joinedTeams.length > 0 && (
+                    <div className="space-y-4">
+                      <h3 className="text-xs font-bold font-display uppercase tracking-widest text-text-secondary/60">
+                        Joined Teams ({joinedTeams.length})
+                      </h3>
+                      {joinedTeams.map((team) => {
+                        if (!db) return null;
+                        const members = db.getTeamMembers(team.id).filter(m => m.status === "approved");
+                        const status = getMemberStatus(team.id);
+                        return (
+                          <div
+                            key={team.id}
+                            className="bg-surface border border-border hover:border-accent/30 rounded-2xl p-5 space-y-4 hover:scale-[1.01] transition duration-200"
+                          >
+                            <div className="flex items-center justify-between border-b border-border/40 pb-3">
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-background border border-border rounded-xl flex items-center justify-center p-1 overflow-hidden">
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img src={team.logo_url || ""} alt="" className="w-full h-full" />
+                                </div>
+                                <div>
+                                  <h3 className="font-bold text-text-primary text-sm uppercase tracking-wide">{team.name}</h3>
+                                  <span className="text-[10px] text-accent font-semibold">{getGameName(team.primary_game)}</span>
+                                </div>
+                              </div>
+                              <div className="flex flex-col items-end">
+                                <span className="text-[9px] text-text-secondary uppercase font-bold">Roster Status</span>
+                                <span className={`text-[10px] px-2 py-0.5 rounded font-mono font-bold uppercase tracking-wider mt-1 ${
+                                  status === "approved"
+                                    ? "bg-green-500/10 border border-green-500/20 text-green-400"
+                                    : status === "rejected"
+                                    ? "bg-red-500/10 border border-red-500/20 text-red-400"
+                                    : "bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 animate-pulse"
+                                }`}>
+                                  {status === "approved" ? "Approved Member" : status === "rejected" ? "Rejected" : "Pending Approval"}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Roster members list */}
+                            <div className="space-y-2">
+                              <h4 className="text-[10px] text-text-secondary uppercase font-bold tracking-widest font-sans">Active Roster ({members.length})</h4>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                {members.map(m => (
+                                  <div key={m.id} className="p-2.5 bg-background/50 border border-border/60 rounded-xl flex items-center justify-between text-xs">
+                                    <span className="font-bold text-text-primary">{getPlayerName(m.player_id)}</span>
+                                    <span className="text-[9px] text-text-secondary font-mono">UID: {getPlayerUID(m.player_id)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 {/* Captain Approvals Request Queue */}
@@ -267,7 +352,7 @@ export default function TeamManagementPage() {
                       <Shield size={16} className="text-accent" /> Join Requests Queue
                     </h3>
 
-                    {teams.map(t => {
+                    {captainedTeams.map(t => {
                       if (!db) return null;
                       const requests = db.getTeamMembers(t.id).filter(m => m.status === "pending");
                       if (requests.length === 0) return null;
@@ -302,7 +387,7 @@ export default function TeamManagementPage() {
                       );
                     })}
 
-                    {teams.every(t => !db || db.getTeamMembers(t.id).filter(m => m.status === "pending").length === 0) && (
+                    {captainedTeams.every(t => !db || db.getTeamMembers(t.id).filter(m => m.status === "pending").length === 0) && (
                       <p className="text-xs text-text-secondary/70 italic text-center py-4">No pending join requests.</p>
                     )}
                   </div>

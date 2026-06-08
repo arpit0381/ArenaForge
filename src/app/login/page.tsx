@@ -106,6 +106,37 @@ export default function LoginPage() {
             </p>
           </div>
 
+          {/* Quick Demo Fill Buttons */}
+          <div className="space-y-2">
+            <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider block">
+              Quick Sign In (Demo Profiles)
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setEmail("captain@crewarena.com");
+                  setPassword("password123");
+                }}
+                className="bg-accent/10 border border-accent/30 hover:border-accent text-accent py-2 px-3 rounded-xl text-[11px] font-bold uppercase tracking-wider transition hover:bg-accent/20 cursor-pointer flex flex-col items-center justify-center gap-0.5 text-center"
+              >
+                <span>Demo Player</span>
+                <span className="text-[9px] opacity-60 lowercase font-mono">captain@crewarena.com</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setEmail("admin@crewarena.com");
+                  setPassword("password123");
+                }}
+                className="bg-red-500/10 border border-red-500/30 hover:border-red-500 text-red-400 py-2 px-3 rounded-xl text-[11px] font-bold uppercase tracking-wider transition hover:bg-red-500/20 cursor-pointer flex flex-col items-center justify-center gap-0.5 text-center"
+              >
+                <span>Demo Admin</span>
+                <span className="text-[9px] opacity-60 lowercase font-mono">admin@crewarena.com</span>
+              </button>
+            </div>
+          </div>
+
           <form onSubmit={handleLogin} className="space-y-5">
             {error && (
               <div className="p-3.5 bg-red-500/10 border border-red-500/30 rounded-xl text-xs text-red-400 font-semibold animate-shake">

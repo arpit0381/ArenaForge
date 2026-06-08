@@ -55,6 +55,16 @@ export default function MobileNav({ userRole }: MobileNavProps) {
         <span className="text-[10px] mt-0.5 font-medium">Teams</span>
       </Link>
 
+      <Link
+        href="/profile"
+        className={`flex flex-col items-center justify-center flex-1 py-1 text-center transition-all ${
+          isActive("/profile") ? "text-accent" : "text-text-secondary hover:text-text-primary"
+        }`}
+      >
+        <Settings size={20} />
+        <span className="text-[10px] mt-0.5 font-medium">Profile</span>
+      </Link>
+
       {userRole === "admin" && (
         <Link
           href="/admin"

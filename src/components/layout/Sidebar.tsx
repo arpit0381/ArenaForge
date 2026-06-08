@@ -25,6 +25,7 @@ export default function Sidebar({ userRole }: SidebarProps) {
     { href: "/tournaments", label: "Tournaments", icon: Trophy },
     { href: "/team", label: "Team Space", icon: Users },
     { href: "/leaderboard", label: "Leaderboard", icon: ListOrdered },
+    { href: "/profile", label: "Profile Settings", icon: Settings },
   ];
 
   const adminLinks = [

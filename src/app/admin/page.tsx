@@ -39,7 +39,7 @@ const revenueData = [
 ];
 
 export default function AdminDashboard() {
-  const [activeSubTab, setActiveSubTab] = useState<"analytics" | "payments" | "tournaments" | "matches">("analytics");
+  const [activeSubTab, setActiveSubTab] = useState<"analytics" | "payments" | "tournaments" | "matches" | "roles">("analytics");
   
   // DB states
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
@@ -48,6 +48,10 @@ export default function AdminDashboard() {
   const [games, setGames] = useState<Game[]>([]);
   const [rooms, setRooms] = useState<MatchRoom[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [profiles, setProfiles] = useState<User[]>([]);
+
+  // Role Search & Manager
+  const [roleSearchQuery, setRoleSearchQuery] = useState("");
 
   // Winners Podium state
   const [podiumChampionId, setPodiumChampionId] = useState("");
@@ -83,6 +87,7 @@ export default function AdminDashboard() {
     setGames(db.getGames());
     setRooms(db.getRooms());
     setPayments(db.getPayments());
+    setProfiles(db.getProfiles());
   };
 
   useEffect(() => {
@@ -352,6 +357,35 @@ export default function AdminDashboard() {
     setTimeout(() => setMessage(""), 2500);
   };
 
+  const handleToggleUserRole = (userId: string, currentRole: "player" | "admin") => {
+    if (!db) return;
+    const newRole = currentRole === "admin" ? "player" : "admin";
+    
+    // Prevent self-demotion
+    const currentUser = db.getCurrentUser();
+    if (currentUser && userId === currentUser.id && currentRole === "admin") {
+      alert("You cannot demote yourself from Admin role.");
+      return;
+    }
+
+    if (confirm(`Are you sure you want to change this user's role to ${newRole.toUpperCase()}?`)) {
+      db.updateUserRole(userId, newRole);
+      setMessage(`User role updated to ${newRole}!`);
+      loadAll();
+      setTimeout(() => setMessage(""), 2000);
+    }
+  };
+
+  const filteredProfiles = profiles.filter(p => {
+    const q = roleSearchQuery.toLowerCase();
+    return (
+      (p.display_name || "").toLowerCase().includes(q) ||
+      (p.username || "").toLowerCase().includes(q) ||
+      (p.game_uid || "").toLowerCase().includes(q) ||
+      (p.telegram_username || "").toLowerCase().includes(q)
+    );
+  });
+
   return (
     <Shell>
       <div className="space-y-6">
@@ -387,6 +421,7 @@ export default function AdminDashboard() {
             { id: "payments", label: `Payments Pending (${registrationsWithPayments.filter(r => r.payment_status === "pending").length})`, icon: DollarSign },
             { id: "tournaments", label: "Creator Desk", icon: Plus },
             { id: "matches", label: "Match Management", icon: Settings },
+            { id: "roles", label: "Role Manager", icon: Users },
           ].map((tab) => {
             const ActiveIcon = tab.icon;
             const active = activeSubTab === tab.id;
@@ -945,6 +980,145 @@ export default function AdminDashboard() {
                 </div>
               )}
 
+            </div>
+          </div>
+        )}
+
+        {/* SECTION 5: ROLE MANAGER SUB TAB */}
+        {activeSubTab === "roles" && (
+          <div className="space-y-6">
+            
+            {/* Overview Counters for Roles */}
+            <div className="grid grid-cols-3 gap-4">
+              <div className="bg-surface border border-border p-4 rounded-xl flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] text-text-secondary uppercase block font-bold">Total Users</span>
+                  <span className="text-xl font-extrabold text-accent font-mono mt-1 block">{profiles.length}</span>
+                </div>
+                <Users size={20} className="text-accent" />
+              </div>
+              <div className="bg-surface border border-border p-4 rounded-xl flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] text-text-secondary uppercase block font-bold">Admins</span>
+                  <span className="text-xl font-extrabold text-red-400 font-mono mt-1 block">
+                    {profiles.filter(p => p.role === "admin").length}
+                  </span>
+                </div>
+                <ShieldAlert size={20} className="text-red-400" />
+              </div>
+              <div className="bg-surface border border-border p-4 rounded-xl flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] text-text-secondary uppercase block font-bold">Players</span>
+                  <span className="text-xl font-extrabold text-green-400 font-mono mt-1 block">
+                    {profiles.filter(p => p.role === "player").length}
+                  </span>
+                </div>
+                <CheckSquare size={20} className="text-green-400" />
+              </div>
+            </div>
+
+            {/* Role Manager Content */}
+            <div className="bg-surface border border-border rounded-2xl p-5 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-bold font-display text-text-primary uppercase tracking-wider">
+                    Fighter & Admin Directory
+                  </h3>
+                  <p className="text-xs text-text-secondary">
+                    Manage system access, promote co-organizers, or toggle tournament authority.
+                  </p>
+                </div>
+                {/* Search */}
+                <div className="w-full sm:w-64">
+                  <input
+                    type="text"
+                    placeholder="Search name, game UID, TG..."
+                    value={roleSearchQuery}
+                    onChange={(e) => setRoleSearchQuery(e.target.value)}
+                    className="w-full bg-background border border-border rounded-xl px-3.5 py-2 text-xs focus:outline-none focus:border-accent text-text-primary"
+                  />
+                </div>
+              </div>
+
+              {filteredProfiles.length === 0 ? (
+                <div className="py-12 text-center text-xs text-text-secondary">
+                  No registered users match your search criteria.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-border text-text-secondary uppercase tracking-wider text-[10px] font-bold">
+                        <th className="py-3 px-4">User / IGN</th>
+                        <th className="py-3 px-4">Username</th>
+                        <th className="py-3 px-4">Game UID</th>
+                        <th className="py-3 px-4">Telegram</th>
+                        <th className="py-3 px-4">Role</th>
+                        <th className="py-3 px-4 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/40">
+                      {filteredProfiles.map((user) => {
+                        const isCurrentUser = db && db.getCurrentUser()?.id === user.id;
+                        return (
+                          <tr key={user.id} className="hover:bg-background/20 transition group">
+                            <td className="py-3 px-4 flex items-center gap-3">
+                              <img
+                                src={user.avatar_url || `https://api.dicebear.com/7.x/pixel-art/svg?seed=${user.username}`}
+                                alt={user.display_name}
+                                className="w-8 h-8 rounded-lg border border-border bg-background group-hover:border-accent/40 transition"
+                              />
+                              <div className="flex flex-col">
+                                <span className="font-bold text-text-primary font-sans">
+                                  {user.display_name}
+                                </span>
+                                <span className="text-[10px] text-text-secondary font-mono">
+                                  {user.city || "No City Specified"}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="py-3 px-4 font-mono text-text-secondary font-semibold">
+                              @{user.username}
+                            </td>
+                            <td className="py-3 px-4 font-mono font-bold text-text-primary">
+                              {user.game_uid || "Not Linked"}
+                            </td>
+                            <td className="py-3 px-4 font-mono">
+                              {user.telegram_username ? (
+                                <span className="text-accent font-semibold">@{user.telegram_username}</span>
+                              ) : (
+                                <span className="text-text-secondary/50">None</span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4">
+                              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
+                                user.role === "admin"
+                                  ? "bg-red-500/10 text-red-400 border border-red-500/20"
+                                  : "bg-accent/10 text-accent border border-accent/20"
+                              }`}>
+                                {user.role}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-right">
+                              <button
+                                onClick={() => handleToggleUserRole(user.id, user.role)}
+                                disabled={isCurrentUser && user.role === "admin"}
+                                className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase border transition cursor-pointer ${
+                                  user.role === "admin"
+                                    ? "border-accent/30 text-accent hover:bg-accent/10 disabled:opacity-40 disabled:cursor-not-allowed"
+                                    : "border-red-500/30 text-red-400 hover:bg-red-500/10"
+                                }`}
+                              >
+                                {user.role === "admin" ? "Demote to Player" : "Promote to Admin"}
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         )}
