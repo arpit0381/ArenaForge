@@ -50,25 +50,230 @@ export default function TelegramSimulator() {
     const text = chatInput.trim();
     setChatInput("");
 
-    if (text.startsWith("/start link_") || text.startsWith("/start VERIFY")) {
-      const code = text.replace("/start ", "");
-      const user = db.getCurrentUser();
-      db.linkTelegram(user.telegram_username || "verified_gamer", 12345678);
-    } else if (text === "/status") {
-      const user = db.getCurrentUser();
-      db.pushNotification(
-        12345678,
-        `🤖 Telegram Status:\nName: ${user.name}\nRole: ${user.role}\nTelegram ID: ${user.telegram_id || "Not Linked"}`
+    const simulatorChatId = 12345678;
+
+    // Helper to find profile linked to this simulator chat ID
+    const getLinkedUser = () => {
+      return db.getProfiles().find(p => p.telegram_id === simulatorChatId);
+    };
+
+    if (text.startsWith("/start")) {
+      const arg = text.replace("/start", "").trim().replace("@", "");
+      
+      if (!arg) {
+        db.pushNotification(
+          simulatorChatId,
+          `🤖 Crew Arena Bot:\nTo link your account, please send: /start <your_telegram_username>\nExample: /start arpit0381`
+        );
+        return;
+      }
+
+      // If user typed VERIFY or code, try to link current logged-in user
+      if (arg.toUpperCase() === "VERIFY123" || arg.toUpperCase().startsWith("VERIFY")) {
+        const currentUser = db.getCurrentUser();
+        if (currentUser && currentUser.id) {
+          const tgUser = currentUser.telegram_username || currentUser.username;
+          db.linkTelegram(tgUser, simulatorChatId);
+          db.pushNotification(
+            simulatorChatId,
+            `🤖 Bot: Connected successfully!\nLogged in as ${currentUser.display_name} (@${tgUser}).`
+          );
+        } else {
+          db.pushNotification(
+            simulatorChatId,
+            `🤖 Bot: ❌ Please login to the website first to link your account.`
+          );
+        }
+        return;
+      }
+
+      // Find user by Telegram username or username
+      const foundUser = db.getProfiles().find(p => 
+        (p.telegram_username || "").toLowerCase() === arg.toLowerCase() ||
+        p.username.toLowerCase() === arg.toLowerCase()
       );
+
+      if (foundUser) {
+        db.linkTelegram(foundUser.telegram_username || arg, simulatorChatId);
+      } else {
+        db.pushNotification(
+          simulatorChatId,
+          `🤖 Bot: ❌ Error: User "${arg}" doesn't exist in the database.\n\nPlease set your Telegram Username to "${arg}" on the Profile Settings page first, then run: /start ${arg}`
+        );
+      }
+
+    } else if (text === "/status") {
+      const linkedUser = getLinkedUser();
+      if (linkedUser) {
+        db.pushNotification(
+          simulatorChatId,
+          `🤖 Telegram Status:\nConnected Account: ${linkedUser.name} (@${linkedUser.telegram_username})\nRole: ${linkedUser.role.toUpperCase()}\nTelegram ID: ${linkedUser.telegram_id}`
+        );
+      } else {
+        db.pushNotification(
+          simulatorChatId,
+          `🤖 Telegram Status:\nNot connected. Send /start <telegram_username> to link your account.`
+        );
+      }
+
+    } else if (text === "/profile") {
+      const linkedUser = getLinkedUser();
+      if (linkedUser) {
+        db.pushNotification(
+          simulatorChatId,
+          `👤 Fighter Profile:\nName: ${linkedUser.display_name}\nUsername: @${linkedUser.username}\nGame UID: ${linkedUser.game_uid || "None"}\nCity: ${linkedUser.city || "Not Specified"}\nRole: ${linkedUser.role.toUpperCase()}`
+        );
+      } else {
+        db.pushNotification(
+          simulatorChatId,
+          `🤖 Bot: ❌ No connected account found. Link it using:\n/start <telegram_username>`
+        );
+      }
+
+    } else if (text === "/myteam") {
+      const linkedUser = getLinkedUser();
+      if (!linkedUser) {
+        db.pushNotification(
+          simulatorChatId,
+          `🤖 Bot: ❌ Please link your account first using /start <telegram_username>`
+        );
+        return;
+      }
+
+      const allTeams = db.getTeams();
+      const allMembers = db.getTeams().map(t => db.getTeamMembers(t.id)).flat();
+      const userMemberships = allMembers.filter(m => m.player_id === linkedUser.id && m.status === "approved");
+      
+      if (userMemberships.length === 0) {
+        db.pushNotification(
+          simulatorChatId,
+          `👥 My Teams:\nYou are not currently registered in any team rosters.`
+        );
+        return;
+      }
+
+      let responseText = `👥 My Teams:\n`;
+      userMemberships.forEach((m, index) => {
+        const team = allTeams.find(t => t.id === m.team_id);
+        if (team) {
+          responseText += `${index + 1}. ${team.name} (Tag: ${team.tag}) - Role: ${m.role.toUpperCase()}\n`;
+        }
+      });
+      db.pushNotification(simulatorChatId, responseText);
+
+    } else if (text === "/matches") {
+      const linkedUser = getLinkedUser();
+      if (!linkedUser) {
+        db.pushNotification(
+          simulatorChatId,
+          `🤖 Bot: ❌ Please link your account first using /start <telegram_username>`
+        );
+        return;
+      }
+
+      const allTeams = db.getTeams();
+      const allMembers = db.getTeams().map(t => db.getTeamMembers(t.id)).flat();
+      const userTeamIds = allMembers
+        .filter(m => m.player_id === linkedUser.id && m.status === "approved")
+        .map(m => m.team_id);
+
+      if (userTeamIds.length === 0) {
+        db.pushNotification(
+          simulatorChatId,
+          `... Upcoming Lobbies:\nYou have no team rosters, so you are not registered in any matches.`
+        );
+        return;
+      }
+
+      const userRegs = db.getRegistrations().filter(r => userTeamIds.includes(r.team_id) && r.status === "approved");
+      const userTourneyIds = userRegs.map(r => r.tournament_id);
+
+      if (userTourneyIds.length === 0) {
+        db.pushNotification(
+          simulatorChatId,
+          `... Upcoming Lobbies:\nYour teams are not registered in any active tournaments.`
+        );
+        return;
+      }
+
+      const userRooms = db.getRooms().filter(r => userTourneyIds.includes(r.tournament_id));
+
+      if (userRooms.length === 0) {
+        db.pushNotification(
+          simulatorChatId,
+          `... Upcoming Lobbies:\nNo rooms have been scheduled/drawn yet for your tournaments.`
+        );
+        return;
+      }
+
+      let responseText = `... Upcoming Lobbies:\n`;
+      userRooms.forEach((room) => {
+        const tourney = db.getTournamentById(room.tournament_id);
+        responseText += `🏆 ${tourney?.name || "League"}\n`;
+        responseText += `- Room: ${room.room_label} (${room.round_type.toUpperCase()})\n`;
+        responseText += `- Room ID: \`${room.room_id_code || "TBD"}\`\n`;
+        responseText += `- Password: \`${room.room_password || "TBD"}\`\n`;
+        responseText += `- Status: ${room.status.toUpperCase()}\n\n`;
+      });
+      db.pushNotification(simulatorChatId, responseText);
+
+    } else if (text === "/results") {
+      const linkedUser = getLinkedUser();
+      if (!linkedUser) {
+        db.pushNotification(
+          simulatorChatId,
+          `🤖 Bot: ❌ Please link your account first using /start <telegram_username>`
+        );
+        return;
+      }
+
+      const allTeams = db.getTeams();
+      const allMembers = db.getTeams().map(t => db.getTeamMembers(t.id)).flat();
+      const userTeamIds = allMembers
+        .filter(m => m.player_id === linkedUser.id && m.status === "approved")
+        .map(m => m.team_id);
+
+      if (userTeamIds.length === 0) {
+        db.pushNotification(
+          simulatorChatId,
+          `📊 Latest Results:\nYou are not on any team roster.`
+        );
+        return;
+      }
+
+      const userResults = db.getResults().filter(r => userTeamIds.includes(r.team_id));
+
+      if (userResults.length === 0) {
+        db.pushNotification(
+          simulatorChatId,
+          `📊 Latest Results:\nNo match results have been entered for your rosters yet.`
+        );
+        return;
+      }
+
+      let responseText = `📊 Latest Results:\n`;
+      userResults.slice(0, 5).forEach((res) => {
+        const room = db.getRooms().find(rm => rm.id === res.match_id);
+        const team = allTeams.find(t => t.id === res.team_id);
+        if (room && team) {
+          responseText += `Lobby: ${room.room_label}\n`;
+          responseText += `- Team: ${team.name}\n`;
+          responseText += `- Rank: #${res.position}\n`;
+          responseText += `- Kills: ${res.kills}\n`;
+          responseText += `- Total points: ${res.total_points} pts\n\n`;
+        }
+      });
+      db.pushNotification(simulatorChatId, responseText);
+
     } else if (text === "/help") {
       db.pushNotification(
-        12345678,
-        `🤖 Available Commands:\n/start VERIFY123 - Link account\n/status - Check profile status\n/help - Show this message`
+        simulatorChatId,
+        `🤖 Crew Arena Bot Commands:\n/start <telegram_username> - Link your account\n/profile - View profile info\n/myteam - View your team rosters\n/matches - View scheduled match rooms & credentials\n/results - View match results\n/status - Check connection status\n/help - View help information`
       );
     } else {
       db.pushNotification(
-        12345678,
-        `🤖 Bot: Received "${text}". Send /help to see commands.`
+        simulatorChatId,
+        `🤖 Bot: Received "${text}". Type /help to see all available commands.`
       );
     }
   };
@@ -113,7 +318,7 @@ export default function TelegramSimulator() {
           {/* Setup / Instructions banner */}
           {!isLinked && (
             <div className="bg-accent/10 p-2 text-center text-[10px] text-accent border-b border-accent/20">
-              💡 To test bot link, type: <code className="bg-black/50 px-1 py-0.5 rounded font-mono">/start VERIFY123</code>
+              💡 Link account: Type <code className="bg-black/50 px-1 py-0.5 rounded font-mono">/start &lt;your_telegram_username&gt;</code> (e.g. /start arpit0381)
             </div>
           )}
 

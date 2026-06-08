@@ -348,8 +348,8 @@ export default function ProfilePage() {
                   <div className="bg-background/80 border border-border p-3.5 rounded-xl text-xs font-mono leading-relaxed space-y-2">
                     <p className="text-[10px] text-accent uppercase font-bold tracking-wider">Instructions to link account:</p>
                     <p>1. Open the simulator bot in the floating widget bottom-right.</p>
-                    <p>2. Send the command: <code className="bg-black/60 px-1.5 py-0.5 rounded text-accent">/start VERIFY123</code></p>
-                    <p>3. This will link your simulated user ID and refresh your profile status instantly.</p>
+                    <p>2. Send the command: <code className="bg-black/60 px-1.5 py-0.5 rounded text-accent">/start @username</code> (using your Telegram Username, e.g. <code className="text-accent">/start arpit0381</code>)</p>
+                    <p>3. This will link your simulated user ID and refresh your profile settings page instantly.</p>
                   </div>
                 </div>
               )}
